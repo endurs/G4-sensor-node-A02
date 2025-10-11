@@ -1,0 +1,5 @@
+C:/dev/g4test3/CMakeFiles/G4sensorNodeA02.dir
+C:/dev/g4test3/CMakeFiles/edit_cache.dir
+C:/dev/g4test3/CMakeFiles/rebuild_cache.dir
+C:/dev/g4test3/cmake/stm32cubemx/CMakeFiles/edit_cache.dir
+C:/dev/g4test3/cmake/stm32cubemx/CMakeFiles/rebuild_cache.dir
