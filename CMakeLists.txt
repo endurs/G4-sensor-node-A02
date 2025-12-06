@@ -21,8 +21,6 @@ endif()
 # Set the project name
 set(CMAKE_PROJECT_NAME G4sensorNodeA02)
 
-# Include toolchain file
-include("cmake/gcc-arm-none-eabi.cmake")
 
 # Enable compile command to ease indexing with e.g. clangd
 set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
@@ -47,7 +45,12 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user sources here
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/sk6812.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/tmp117.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/tc_k.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/adc_dma.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/acan.c
+
 )
 
 # Add include paths

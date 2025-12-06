@@ -20,7 +20,9 @@
 #include "main.h"
 #include "adc.h"
 #include "dma.h"
+#include "fdcan.h"
 #include "i2c.h"
+#include "rtc.h"
 #include "tim.h"
 #include "gpio.h"
 
@@ -32,6 +34,7 @@
 #include "tmp117.h"
 #include "adc_dma.h"
 #include "tc_k.h"
+#include "acan.h"
 
 /* USER CODE END Includes */
 
@@ -54,6 +57,8 @@
 
 /* USER CODE BEGIN PV */
 extern I2C_HandleTypeDef hi2c4;   // from i2c.c
+
+extern FDCAN_HandleTypeDef hfdcan3;
 
 // Driver instances
 static tmp117_t t_49; // ADD0=V+ (7-bit 0x49)
@@ -81,12 +86,14 @@ volatile uint32_t g_i2c4_error = 0;
 volatile HAL_I2C_StateTypeDef g_i2c4_state = HAL_I2C_STATE_RESET;
 volatile uint32_t g_memrx_cplt_hits = 0;
 
-const uint32_t adc_buffer_read_delay_ms = 10; // Delay between ADC DMA reads
+const uint32_t adc_buffer_read_delay_ms = 100; // Delay between ADC DMA reads
 
 
 float rainbow_hue = 0.0f;
 const uint32_t user_led_delay_ms = 60; // Speed for user LED cycling
 const uint32_t rgb_led_delay_ms = 5;   // Speed for RGB LED rainbow effect
+
+const uint32_t acan_msg_freq = 2; //hz
 
 const float max_temp_c = 100.0f; // Temperature corresponding to full red
 const float min_temp_c = 0.0f; // Temperature corresponding to full blue
@@ -143,12 +150,14 @@ int main(void)
   MX_ADC3_Init();
   MX_ADC4_Init();
   MX_TIM6_Init();
+  MX_FDCAN3_Init();
+  MX_RTC_Init();
   /* USER CODE BEGIN 2 */
   
   tc_k_init(&g_tc_k, (tc_k_cfg_t){
   .gain = 110.89f,
   .v_offset = 1.235f     /* set 0.0f if no bias */
-});
+  });
 
   ADC_DMA_StartAll();
   
@@ -158,16 +167,8 @@ int main(void)
   TMP117_Init(&t_49, &hi2c4, 0x49);
   TMP117_Init(&t_48, &hi2c4, 0x48);
 
-  
+  ACAN_Init(&hfdcan3);
 
-  // Optional presence / ID checks (ignore return values if you just want to proceed)
-  (void)TMP117_IsReady(&t_49, 2);
-  (void)TMP117_IsReady(&t_48, 2);
-
-
-  // If you had enabled DRDY-on-ALERT earlier it won't hurt, but it's not required for this periodic-DMA path.
-  // (void)TMP117_EnableDRDYonAlert(&t_49, 0);
-  // (void)TMP117_EnableDRDYonAlert(&t_48, 0);
 
   // Initialize timestamps so we don't burst immediately
   last_sample_49 = HAL_GetTick();
@@ -178,6 +179,7 @@ int main(void)
   uint32_t last_user_led_tick = HAL_GetTick();
   uint32_t last_rgb_led_tick = HAL_GetTick();
   uint32_t last_temp_OC_blink = HAL_GetTick();
+  uint32_t last_acan_msg = HAL_GetTick();
   uint8_t user_led_index = 0;
 
   GPIO_TypeDef* ports[] = {GPIOA, GPIOB, GPIOB, GPIOB};
@@ -214,6 +216,7 @@ int main(void)
       // Turn on next LED
       HAL_GPIO_WritePin(ports[user_led_index], pins[user_led_index], GPIO_PIN_SET);
       last_user_led_tick = now;
+
     }
 
     // // RGB LED rainbow effect (all LEDs, smooth cycling)
@@ -229,9 +232,7 @@ int main(void)
     // }
 
     // Temprature LED representation
-    // calculate slope between the two temperatures which are mesured at temp sensor 0 and 2 for reference
     float slope = (g_tmp117_c_48 - g_tmp117_c_49) / 2.0f;
-    // estimate the temperature at temp sensor 1 and 3
     float est_temp_1 = g_tmp117_c_49 + slope * 1.0f;
     float est_temp_3 = g_tmp117_c_49 + slope * 3.0f;
 
@@ -242,7 +243,6 @@ int main(void)
 
 
     //use the four temperature values to set the color of the four leds
-    //float temps[4] = {PT1_v, PT2_v, PT3_v, PT4_v};
     for (uint16_t i = 0; i < 4; ++i)
     {
       if (g_tc_degC[3-i] >= open_circuit_temp_c) // if open circuit detected
@@ -298,22 +298,36 @@ int main(void)
 
 
     ///// READ ADC DMA BUFFER EVERY 10 ms /////
-     if (now - last_adc_poll >= adc_buffer_read_delay_ms) {
-    last_adc_poll = now;
+    if (now - last_adc_poll >= adc_buffer_read_delay_ms) {
+      last_adc_poll = now;
 
-    const float q = 3.3f / 65535.0f; //65535.0f;
+      const float q = 3.3f / 65535.0f; //65535.0f;
 
-    PT1_v = g_adc_avg_500Hz[0][1] * q;
-    PT2_v = g_adc_avg_500Hz[1][1] * q;
-    PT3_v = g_adc_avg_500Hz[2][1] * q;
-    PT4_v = g_adc_avg_500Hz[3][1] * q;
+      PT1_v = g_adc_avg_500Hz[0][1] * q;
+      PT2_v = g_adc_avg_500Hz[1][1] * q;
+      PT3_v = g_adc_avg_500Hz[2][1] * q;
+      PT4_v = g_adc_avg_500Hz[3][1] * q;
 
-    TC1_v = g_adc_avg_500Hz[0][0] * q;
-    TC2_v = g_adc_avg_500Hz[1][0] * q;
-    TC3_v = g_adc_avg_500Hz[2][0] * q;
-    TC4_v = g_adc_avg_500Hz[3][0] * q;
+      TC1_v = g_adc_avg_500Hz[0][0] * q;
+      TC2_v = g_adc_avg_500Hz[1][0] * q;
+      TC3_v = g_adc_avg_500Hz[2][0] * q;
+      TC4_v = g_adc_avg_500Hz[3][0] * q;
 
-  }
+
+      TelemetryFrame_t can_msg = {  .timestamp = now,
+                                    .value = {PT1_v, PT2_v, PT3_v, PT4_v, g_tc_degC[0], g_tc_degC[1], g_tc_degC[2], g_tc_degC[3]},
+                                    .reserved = {0}
+      };
+
+    HAL_StatusTypeDef st = ACAN_Send(&can_msg);
+    uint32_t now = HAL_GetTick();
+    if (st != HAL_OK) {
+        
+    }
+
+
+    }
+
 
   }
   /* USER CODE END 3 */
@@ -332,17 +346,23 @@ void SystemClock_Config(void)
   */
   HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1_BOOST);
 
+  /** Configure LSE Drive Capability
+  */
+  HAL_PWR_EnableBkUpAccess();
+  __HAL_RCC_LSEDRIVE_CONFIG(RCC_LSEDRIVE_LOW);
+
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE|RCC_OSCILLATORTYPE_LSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.LSEState = RCC_LSE_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-  RCC_OscInitStruct.PLL.PLLM = RCC_PLLM_DIV12;
-  RCC_OscInitStruct.PLL.PLLN = 85;
+  RCC_OscInitStruct.PLL.PLLM = RCC_PLLM_DIV6;
+  RCC_OscInitStruct.PLL.PLLN = 40;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
-  RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV2;
+  RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV8;
   RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV2;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -393,8 +413,7 @@ void Error_Handler(void)
   }
   /* USER CODE END Error_Handler_Debug */
 }
-
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
   *         where the assert_param error has occurred.

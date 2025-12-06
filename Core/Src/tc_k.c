@@ -50,6 +50,7 @@ static const float K_DIR_POS_C[] = { /* 0°C .. 1372°C */
   9.7151147152e-20f,
  -1.2104721275e-23f
 };
+
 /* Magnetic-ordering Gaussian term (only for T >= 0°C) */
 static const float K_DIR_ALPHA0 = 1.185976e+2f;
 static const float K_DIR_ALPHA1 = -1.183432e-4f;
