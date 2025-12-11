@@ -158,30 +158,32 @@ bool sk6812_busy(void)
 
 void sk6812_show(void)
 {
-    /* If you prefer non-blocking, just return when busy. */
-    while (dmaBusy) { __NOP(); }
+    // Don’t re-enter if a frame is already in progress.
+    if (dmaBusy) {
+        return;
+    }
 
-    /* 1) Encode pixel buffer into duty-cycle words (CCR values). */
+    // 1) Encode pixel buffer into duty-cycle words (CCR values).
     uint32_t w = 0;
     for (uint32_t i = 0; i < LED_COUNT; ++i) {
         for (uint32_t j = 0; j < BYTES_PER_LED; ++j) {
-            encode_byte(pixels[i*BYTES_PER_LED + j], &dmaBuf[w]);
+            encode_byte(pixels[i * BYTES_PER_LED + j], &dmaBuf[w]);
             w += 8;
         }
     }
-    /* 2) Reset (latch) time: keep low by writing CCR=0 for a bunch of slots. */
+
+    // 2) Reset (latch) time: CCR=0 for a bunch of slots.
     for (uint32_t r = 0; r < RESET_SLOTS; ++r) {
         dmaBuf[w++] = 0;
     }
 
-    /* 3) Kick PWM + DMA. CubeMX must have OC preload enabled. */
+    // 3) Kick PWM + DMA, then return immediately.
     dmaBusy = true;
     __HAL_TIM_SET_AUTORELOAD(SK_TIM, (uint32_t)(period_ticks - 1u));
     __HAL_TIM_SET_COUNTER(SK_TIM, 0);
-    HAL_TIM_PWM_Start_DMA(SK_TIM, SK_TIM_CH, (uint32_t*)dmaBuf, w);
-
-    /* MVP behavior: block until DMA finishes. */
-    while (dmaBusy) { __NOP(); }
+    if (HAL_TIM_PWM_Start_DMA(SK_TIM, SK_TIM_CH, (uint32_t *)dmaBuf, w) != HAL_OK) {
+        dmaBusy = false;
+    }
 }
 
 /* HAL invokes this when the DMA transfer for the PWM channel completes. */

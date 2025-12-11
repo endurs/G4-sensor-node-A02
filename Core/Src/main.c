@@ -35,6 +35,8 @@
 #include "adc_dma.h"
 #include "tc_k.h"
 #include "acan.h"
+#include "light_service.h"
+#include "rgb_light_service.h"
 
 /* USER CODE END Includes */
 
@@ -152,8 +154,11 @@ int main(void)
   MX_TIM6_Init();
   MX_FDCAN3_Init();
   MX_RTC_Init();
+  MX_TIM7_Init();
   /* USER CODE BEGIN 2 */
   
+
+  //ADC and thermocouple setup
   tc_k_init(&g_tc_k, (tc_k_cfg_t){
   .gain = 110.89f,
   .v_offset = 1.235f     /* set 0.0f if no bias */
@@ -161,13 +166,28 @@ int main(void)
 
   ADC_DMA_StartAll();
   
-  sk6812_init();
+  //Addressable leds
 
 
+  //start temp sensors
   TMP117_Init(&t_49, &hi2c4, 0x49);
   TMP117_Init(&t_48, &hi2c4, 0x48);
 
+  //CAN bus
   ACAN_Init(&hfdcan3);
+
+  //LED services
+  Light_Service_Init(0x5);
+  Light_Service_Set_Display_State(LED_DISPLAY_BOUNCE_CYCLE);
+  
+  Rgb_Light_Service_Init();
+  Rgb_Light_Service_SetMode(RGB_MODE_TEMPERATURE);
+  
+  HAL_TIM_Base_Start_IT(&htim7);
+
+
+  float test_temps[4] = {477.0f, 100.0f, 67.0f, 0.0f};
+  Rgb_Light_Service_SetTemperatures(test_temps);
 
 
   // Initialize timestamps so we don't burst immediately
@@ -176,14 +196,7 @@ int main(void)
 
   uint32_t last_adc_poll = HAL_GetTick();
 
-  uint32_t last_user_led_tick = HAL_GetTick();
-  uint32_t last_rgb_led_tick = HAL_GetTick();
-  uint32_t last_temp_OC_blink = HAL_GetTick();
-  uint32_t last_acan_msg = HAL_GetTick();
-  uint8_t user_led_index = 0;
 
-  GPIO_TypeDef* ports[] = {GPIOA, GPIOB, GPIOB, GPIOB};
-  uint16_t pins[] = {GPIO_PIN_10, GPIO_PIN_9, GPIO_PIN_11, GPIO_PIN_10};
 
   volatile float PT1_v = 0;
   volatile float PT2_v = 0;
@@ -207,59 +220,7 @@ int main(void)
   {
     uint32_t now = HAL_GetTick();
 
-    // User LED cycling (one at a time, smooth wave)
-    if (now - last_user_led_tick >= user_led_delay_ms) {
-      // Turn off previous LED
-      HAL_GPIO_WritePin(ports[user_led_index], pins[user_led_index], GPIO_PIN_RESET);
-      // Advance to next LED
-      user_led_index = (user_led_index + 1) % 4;
-      // Turn on next LED
-      HAL_GPIO_WritePin(ports[user_led_index], pins[user_led_index], GPIO_PIN_SET);
-      last_user_led_tick = now;
-
-    }
-
-    // // RGB LED rainbow effect (all LEDs, smooth cycling)
-    // if (now - last_rgb_led_tick >= rgb_led_delay_ms) {
-    //   for (uint16_t i = 0; i < LED_COUNT; ++i) {
-    //     float hue = fmodf(rainbow_hue + (90.0f / LED_COUNT) * i, 360.0f);
-    //     sk6812_set_hsi(i, hue, 1.0f, 1.0f); // full saturation, full intensity
-    //   }
-    //   sk6812_show();
-    //   rainbow_hue += 1.0f; // speed of cycling; increase for faster effect
-    //   if (rainbow_hue >= 360.0f) rainbow_hue -= 360.0f;
-    //   last_rgb_led_tick = now;
-    // }
-
-    // Temprature LED representation
-    float slope = (g_tmp117_c_48 - g_tmp117_c_49) / 2.0f;
-    float est_temp_1 = g_tmp117_c_49 + slope * 1.0f;
-    float est_temp_3 = g_tmp117_c_49 + slope * 3.0f;
-
-    float cj_est[4] = {g_tmp117_c_48, est_temp_1, g_tmp117_c_49, est_temp_3};
-    float v_tc_adc[4] = { TC1_v, TC2_v, TC3_v, TC4_v };
-
-    tc_k_convert4(&g_tc_k, v_tc_adc, cj_est, (float*)g_tc_degC);
-
-
-    //use the four temperature values to set the color of the four leds
-    for (uint16_t i = 0; i < 4; ++i)
-    {
-      if (g_tc_degC[3-i] >= open_circuit_temp_c) // if open circuit detected
-      {
-        // Blink the LED between off and white
-        if ((now / open_circuit_blink_period_ms) % 2 == 0) {
-          sk6812_set_rgb(i, 10, 10, 10); // white
-        } else {
-          sk6812_set_rgb(i, 0, 0, 0); // off
-        }
-      }
-      else {
-        // Normal temperature-to-color mapping
-        sk6812_set_temperature(i, g_tc_degC[3-i], min_temp_c, max_temp_c);
-      }
-    }
-    sk6812_show();
+    
     
 
     /* USER CODE END WHILE */
@@ -320,15 +281,10 @@ int main(void)
       };
 
     HAL_StatusTypeDef st = ACAN_Send(&can_msg);
-    uint32_t now = HAL_GetTick();
     if (st != HAL_OK) {
         
     }
-
-
     }
-
-
   }
   /* USER CODE END 3 */
 }
@@ -392,10 +348,16 @@ void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c)
   g_memrx_cplt_hits++;                 // prove ISR fired
   TMP117_I2C_MemRxCpltIRQ(hi2c);
 }
-
 // (Optional) If you want to recover from bus errors more aggressively later:
 // void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c) { /* add recovery here if needed */ }
 
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim->Instance == TIM7) {
+        Light_Service_Update();
+        Rgb_Light_Service_Update();
+    }
+}
 
 /* USER CODE END 4 */
 
