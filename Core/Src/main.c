@@ -37,6 +37,7 @@
 #include "acan.h"
 #include "light_service.h"
 #include "rgb_light_service.h"
+#include <stdint.h>
 
 /* USER CODE END Includes */
 
@@ -63,44 +64,23 @@ extern I2C_HandleTypeDef hi2c4;   // from i2c.c
 extern FDCAN_HandleTypeDef hfdcan3;
 
 // Driver instances
-static tmp117_t t_49; // ADD0=V+ (7-bit 0x49)
-static tmp117_t t_48; // ADD0=GND (7-bit 0x48)
+static tmp117_t g_tmp117_48;  // ALERT on PC4, addr 0x48
+static tmp117_t g_tmp117_49;  // ALERT on PB0, addr 0x49
 
+static tmp117_t *g_tmp_list[] = {
+    &g_tmp117_48,
+    &g_tmp117_49
+};
+
+static const uint8_t g_tmp_count = sizeof(g_tmp_list) / sizeof(g_tmp_list[0]);
 
 //TC stuff
 static tc_k_ctx_t g_tc_k;
 volatile float g_tc_degC[4] = {0};
 
-// Easy-to-watch debug variables
-volatile float   g_tmp117_c_49 = 0.0f;
-volatile float   g_tmp117_c_48 = 0.0f;
-volatile int16_t g_tmp117_raw_49 = 0;
-volatile int16_t g_tmp117_raw_48 = 0;
-
-// Periodic sampling setup (100 ms is conservative and well above conv. time)
-static const uint32_t TMP117_SAMPLE_PERIOD_MS = 10;
-static uint32_t last_sample_49 = 0;
-static uint32_t last_sample_48 = 0;
-
-volatile HAL_StatusTypeDef g_dma_kick_49 = HAL_OK;
-volatile HAL_StatusTypeDef g_dma_kick_48 = HAL_OK;
-volatile uint32_t g_i2c4_error = 0;
-volatile HAL_I2C_StateTypeDef g_i2c4_state = HAL_I2C_STATE_RESET;
-volatile uint32_t g_memrx_cplt_hits = 0;
-
 const uint32_t adc_buffer_read_delay_ms = 100; // Delay between ADC DMA reads
 
-
-float rainbow_hue = 0.0f;
-const uint32_t user_led_delay_ms = 60; // Speed for user LED cycling
-const uint32_t rgb_led_delay_ms = 5;   // Speed for RGB LED rainbow effect
-
 const uint32_t acan_msg_freq = 2; //hz
-
-const float max_temp_c = 100.0f; // Temperature corresponding to full red
-const float min_temp_c = 0.0f; // Temperature corresponding to full blue
-const float open_circuit_temp_c = 200.0f; // Temperature to show for open circuit (out of range)
-const uint16_t open_circuit_blink_period_ms = 500; // Blink period for open-circuit indication
 
 /* USER CODE END PV */
 
@@ -159,16 +139,21 @@ int main(void)
   
 
   //ADC and thermocouple
-  tc_k_init(&g_tc_k, (tc_k_cfg_t){
-  .gain = 110.89f,
-  .v_offset = 1.235f     /* set 0.0f if no bias */
-  });
-
+  tc_k_init(&g_tc_k, (tc_k_cfg_t) {
+    .gain = 110.89f, 
+    .v_offset = 1.235f
+    });
+        
   ADC_DMA_StartAll();
   
+
   //on-board temp sensors
-  TMP117_Init(&t_49, &hi2c4, 0x49);
-  TMP117_Init(&t_48, &hi2c4, 0x48);
+  TMP117_Init(&g_tmp117_49, &hi2c4, 0x49);
+  TMP117_Init(&g_tmp117_48, &hi2c4, 0x48);
+
+  TMP117_EnableDRDYonAlert(&g_tmp117_49, 0);
+  TMP117_EnableDRDYonAlert(&g_tmp117_48, 0);
+
 
   //CAN bus
   ACAN_Init(&hfdcan3);
@@ -182,10 +167,6 @@ int main(void)
   
   HAL_TIM_Base_Start_IT(&htim7); //interrupt running rgb and light service updates
 
-
-  // Initialize timestamps so we don't burst immediately
-  last_sample_49 = HAL_GetTick();
-  last_sample_48 = HAL_GetTick();
 
   uint32_t last_adc_poll = HAL_GetTick();
 
@@ -209,39 +190,6 @@ int main(void)
   {
     uint32_t now = HAL_GetTick();
 
-
-        // If EXTI said something is pending, run the scheduler (starts one DMA if idle)
-    // --- Kick periodic DMA reads (non-blocking) ---
-    if (!t_49.busy && (now - last_sample_49) >= TMP117_SAMPLE_PERIOD_MS) {
-      g_dma_kick_49 = TMP117_StartReadTemp_DMA(&t_49);
-      g_i2c4_error  = hi2c4.ErrorCode;
-      g_i2c4_state  = HAL_I2C_GetState(&hi2c4);
-      if (g_dma_kick_49 == HAL_OK) last_sample_49 = now;
-    }
-
-    if (!t_48.busy && (now - last_sample_48) >= TMP117_SAMPLE_PERIOD_MS) {
-      g_dma_kick_48 = TMP117_StartReadTemp_DMA(&t_48);
-      g_i2c4_error  = hi2c4.ErrorCode;
-      g_i2c4_state  = HAL_I2C_GetState(&hi2c4);
-      if (g_dma_kick_48 == HAL_OK) last_sample_48 = now;
-    }
-
-    // --- Harvest results written by the DMA-complete ISR ---
-    if (t_49.new_data) {
-      t_49.new_data   = 0;
-      g_tmp117_raw_49 = t_49.last_raw;
-      g_tmp117_c_49   = t_49.last_degC;   // watch this in the debugger
-    }
-
-    if (t_48.new_data) {
-      t_48.new_data   = 0;
-      g_tmp117_raw_48 = t_48.last_raw;
-      g_tmp117_c_48   = t_48.last_degC;   // watch this in the debugger
-    }
-
-
-
-    ///// READ ADC DMA BUFFER EVERY 10 ms /////
     if (now - last_adc_poll >= adc_buffer_read_delay_ms) {
       last_adc_poll = now;
 
@@ -263,13 +211,8 @@ int main(void)
                                     .reserved = {0}
       };
 
-    HAL_StatusTypeDef st = ACAN_Send(&can_msg);
-    if (st != HAL_OK) {
-        
+      ACAN_Send(&can_msg);
     }
-    }
-    
-    
 
     /* USER CODE END WHILE */
 
@@ -335,12 +278,12 @@ void SystemClock_Config(void)
 
 void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c)
 {
-  // Hand off to the driver; it updates whichever device was active
-  g_memrx_cplt_hits++;                 // prove ISR fired
   TMP117_I2C_MemRxCpltIRQ(hi2c);
+
+  //todo put cjc pusher function in here
+
+  TMP117_Scheduler_Service(g_tmp_list, g_tmp_count);
 }
-// (Optional) If you want to recover from bus errors more aggressively later:
-// void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c) { /* add recovery here if needed */ }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
@@ -348,6 +291,21 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         light_service_update();
         rgb_light_service_update();
     }
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+    if (GPIO_Pin == GPIO_PIN_0) {
+        // ALERT from TMP117 at 0x49 (PB0)
+        TMP117_MarkPending(&g_tmp117_49);
+    } else if (GPIO_Pin == GPIO_PIN_4) {
+        // ALERT from TMP117 at 0x48 (PC4)
+        TMP117_MarkPending(&g_tmp117_48);
+    } else {
+        return;
+    }
+
+    TMP117_Scheduler_Service(g_tmp_list, g_tmp_count);
 }
 
 /* USER CODE END 4 */

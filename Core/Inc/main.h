@@ -65,6 +65,12 @@ void Error_Handler(void);
 #define TC2_ADC_GPIO_Port GPIOA
 #define PT2_ADC_Pin GPIO_PIN_7
 #define PT2_ADC_GPIO_Port GPIOA
+#define Alert2_Pin GPIO_PIN_4
+#define Alert2_GPIO_Port GPIOC
+#define Alert2_EXTI_IRQn EXTI4_IRQn
+#define Alert1_Pin GPIO_PIN_0
+#define Alert1_GPIO_Port GPIOB
+#define Alert1_EXTI_IRQn EXTI0_IRQn
 #define TC3_ADC_Pin GPIO_PIN_1
 #define TC3_ADC_GPIO_Port GPIOB
 #define LED_tim_5_Pin GPIO_PIN_2

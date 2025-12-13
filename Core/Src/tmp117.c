@@ -1,7 +1,7 @@
 #include "tmp117.h"
 #include <string.h>
 
-static tmp117_t *g_active_dev = NULL;
+static tmp117_t volatile *g_active_dev = NULL;
 
 void TMP117_Init(tmp117_t *dev, I2C_HandleTypeDef *hi2c, uint8_t addr7)
 {
@@ -109,17 +109,9 @@ int TMP117_Scheduler_Service(tmp117_t **dev_list, uint8_t dev_count)
 {
     if (g_active_dev) return 0;
 
-    // First pass: pending devices
     for (uint8_t i = 0; i < dev_count; i++) {
         tmp117_t *d = dev_list[i];
-        if (d->pending && !d->busy) {
-            if (TMP117_StartReadTemp_DMA(d) == HAL_OK) return 1;
-        }
-    }
-    // Second pass: opportunistic (not strictly needed for DRDY)
-    for (uint8_t i = 0; i < dev_count; i++) {
-        tmp117_t *d = dev_list[i];
-        if (!d->busy) {
+        if (d->pending && !d->busy){
             if (TMP117_StartReadTemp_DMA(d) == HAL_OK) return 1;
         }
     }
