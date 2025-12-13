@@ -9,19 +9,19 @@ extern "C" {
 #endif
 
 typedef enum {
-    RGB_MODE_OFF = 0,
-    RGB_MODE_RAINBOW,
-    RGB_MODE_TEMPERATURE,
-    RGB_MODE_HSI_SOLID
-} RgbMode;
+    RGB_DISPLAY_OFF = 0,
+    RGB_DISPLAY_RAINBOW,
+    RGB_DISPLAY_TEMPERATURE,
+    RGB_DISPLAY_HSI_SOLID
+} RgbDisplayState;
 
-void Rgb_Light_Service_Init(void);
-void Rgb_Light_Service_Update(void);
+void rgb_light_service_init(void);
+void rgb_light_service_update(void);
 
-void Rgb_Light_Service_SetMode(RgbMode mode);
+void rgb_light_service_set_state(RgbDisplayState state);
 
-void Rgb_Light_Service_SetHSI(float h, float s, float i);
-void Rgb_Light_Service_SetTemperatures(const float *temps4);
+void rgb_light_service_set_hsi(float h, float s, float i);
+void rgb_light_service_set_temperatures(const float *temps4);
 
 
 #ifdef __cplusplus

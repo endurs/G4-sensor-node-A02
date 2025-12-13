@@ -11,7 +11,7 @@
 #define MIN_TEMP -5
 #define MAX_TEMP 105
 
-static RgbMode current_mode = RGB_MODE_OFF;
+static RgbDisplayState current_state = RGB_DISPLAY_OFF;
 
 static float current_h = 0.0f;
 static float current_s = 1.0f;
@@ -24,11 +24,11 @@ static uint16_t cycle_count = 0u;
 static uint16_t cycle_state = 0u;
 
 //halpers
-static void Rgb_Display_Rainbow(void);
-static void Rgb_Display_Temperature(void);
-static void Rgb_Display_HSI_Solid(void);
+static void rgb_display_rainbow(void);
+static void rgb_display_temperature(void);
+static void rgb_display_hsi_solid(void);
 
-void Rgb_Light_Service_Init(void){
+void rgb_light_service_init(void){
 
     sk6812_init();
     
@@ -37,25 +37,25 @@ void Rgb_Light_Service_Init(void){
     }
 }
 
-void Rgb_Light_Service_Update(void)
+void rgb_light_service_update(void)
 {
-    switch (current_mode) {
-    case RGB_MODE_OFF:
+    switch (current_state) {
+    case RGB_DISPLAY_OFF:
         for (uint16_t i = 0; i < LED_COUNT; ++i) {
             sk6812_set_rgb(i, 0, 0, 0);
         }
         break;
 
-    case RGB_MODE_RAINBOW:
-        Rgb_Display_Rainbow();
+    case RGB_DISPLAY_RAINBOW:
+        rgb_display_rainbow();
         break;
 
-    case RGB_MODE_TEMPERATURE:
-        Rgb_Display_Temperature();
+    case RGB_DISPLAY_TEMPERATURE:
+        rgb_display_temperature();
         break;
 
-    case RGB_MODE_HSI_SOLID:
-        Rgb_Display_HSI_Solid();
+    case RGB_DISPLAY_HSI_SOLID:
+        rgb_display_hsi_solid();
         break;
 
     default:
@@ -64,32 +64,32 @@ void Rgb_Light_Service_Update(void)
     sk6812_show();
 }
 
-void Rgb_Light_Service_SetMode(RgbMode mode){
-    current_mode = mode;
+void rgb_light_service_set_state(RgbDisplayState state){
+    current_state = state;
 }
 
-void Rgb_Light_Service_SetTemperatures(const float *temps4)
+void rgb_light_service_set_temperatures(const float *temps4)
 {
     for (int i = 0; i < 4; ++i) {
         current_temps[i] = temps4[i];
     }
 }
 
-void Rgb_Light_Service_SetHSI(float h, float s, float i)
+void rgb_light_service_set_hsi(float h, float s, float i)
 {
     current_h = h;
     current_s = s;
     current_i = i;
 }
 
-static void Rgb_Display_HSI_Solid(void)
+static void rgb_display_hsi_solid(void)
 {
     for (uint16_t i = 0; i < LED_COUNT; ++i) {
         sk6812_set_hsi(i, current_h, current_s, current_i);
     }
 }
 
-static void Rgb_Display_Rainbow(void)
+static void rgb_display_rainbow(void)
 {
     for (uint16_t i = 0; i < LED_COUNT; ++i) {
         float hue = fmodf(rainbow_hue + (90.0f / LED_COUNT) * i, 360.0f);
@@ -102,7 +102,7 @@ static void Rgb_Display_Rainbow(void)
     }
 }
 
-static void Rgb_Display_Temperature(void)
+static void rgb_display_temperature(void)
 {
     if (cycle_count >= (uint16_t)(UPDATE_RATE / NO_TEMP_BLINK_RATE)) {
         cycle_count = 0;

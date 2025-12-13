@@ -158,7 +158,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   
 
-  //ADC and thermocouple setup
+  //ADC and thermocouple
   tc_k_init(&g_tc_k, (tc_k_cfg_t){
   .gain = 110.89f,
   .v_offset = 1.235f     /* set 0.0f if no bias */
@@ -166,10 +166,7 @@ int main(void)
 
   ADC_DMA_StartAll();
   
-  //Addressable leds
-
-
-  //start temp sensors
+  //on-board temp sensors
   TMP117_Init(&t_49, &hi2c4, 0x49);
   TMP117_Init(&t_48, &hi2c4, 0x48);
 
@@ -177,17 +174,13 @@ int main(void)
   ACAN_Init(&hfdcan3);
 
   //LED services
-  Light_Service_Init(0x5);
-  Light_Service_Set_Display_State(LED_DISPLAY_BOUNCE_CYCLE);
+  light_service_init(0x5);
+  light_service_set_state(LED_DISPLAY_BOUNCE_CYCLE);
   
-  Rgb_Light_Service_Init();
-  Rgb_Light_Service_SetMode(RGB_MODE_TEMPERATURE);
+  rgb_light_service_init();
+  rgb_light_service_set_state(RGB_DISPLAY_RAINBOW);
   
-  HAL_TIM_Base_Start_IT(&htim7);
-
-
-  float test_temps[4] = {477.0f, 100.0f, 67.0f, 0.0f};
-  Rgb_Light_Service_SetTemperatures(test_temps);
+  HAL_TIM_Base_Start_IT(&htim7); //interrupt running rgb and light service updates
 
 
   // Initialize timestamps so we don't burst immediately
@@ -195,8 +188,6 @@ int main(void)
   last_sample_48 = HAL_GetTick();
 
   uint32_t last_adc_poll = HAL_GetTick();
-
-
 
   volatile float PT1_v = 0;
   volatile float PT2_v = 0;
@@ -208,8 +199,6 @@ int main(void)
   volatile float TC3_v = 0;
   volatile float TC4_v = 0;
 
-
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -220,14 +209,8 @@ int main(void)
   {
     uint32_t now = HAL_GetTick();
 
-    
-    
 
-    /* USER CODE END WHILE */
-
-    /* USER CODE BEGIN 3 */
-
-    // If EXTI said something is pending, run the scheduler (starts one DMA if idle)
+        // If EXTI said something is pending, run the scheduler (starts one DMA if idle)
     // --- Kick periodic DMA reads (non-blocking) ---
     if (!t_49.busy && (now - last_sample_49) >= TMP117_SAMPLE_PERIOD_MS) {
       g_dma_kick_49 = TMP117_StartReadTemp_DMA(&t_49);
@@ -285,6 +268,14 @@ int main(void)
         
     }
     }
+    
+    
+
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
+
+
   }
   /* USER CODE END 3 */
 }
@@ -354,8 +345,8 @@ void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if (htim->Instance == TIM7) {
-        Light_Service_Update();
-        Rgb_Light_Service_Update();
+        light_service_update();
+        rgb_light_service_update();
     }
 }
 

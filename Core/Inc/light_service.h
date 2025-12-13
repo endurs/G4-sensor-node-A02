@@ -16,15 +16,13 @@ typedef enum {
     LED_DISPLAY_ERROR
 }LedDIsplayState;
 
-extern bool RUN_LIGHT_SERVICE;
+void light_service_init(uint16_t can_id);
 
-void Light_Service_Init(uint16_t can_id);
+void light_service_update(void);
 
-void Light_Service_Update(void);
+void light_service_set_state(LedDIsplayState);
 
-void Light_Service_Set_Display_State(LedDIsplayState);
-
-void Light_Service_Set_Can_Id(uint16_t can_id);
+void light_service_set_can_id(uint16_t can_id);
 
 
 

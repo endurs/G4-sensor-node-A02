@@ -10,7 +10,7 @@
 #define CYCLE_RATE 10u
 
 static volatile uint16_t current_can_id = 0x0;
-static volatile LedDIsplayState Led_display_state = LED_DISPLAY_CANID;
+static volatile LedDIsplayState led_display_state = LED_DISPLAY_CANID;
 
 //defining ports and pins for the four LEDs present
 static GPIO_TypeDef* const  led_ports[] = {GPIOA,       GPIOB,      GPIOB,          GPIOB};
@@ -23,20 +23,20 @@ static bool     cycle_dir   = true;
 
 
 
-void Light_Service_Init(uint16_t can_id){
+void light_service_init(uint16_t can_id){
       current_can_id = can_id;
 }
 
-void Light_Service_Set_Display_State(LedDIsplayState state){
-    Led_display_state = state;
+void light_service_set_state(LedDIsplayState state){
+    led_display_state = state;
 }
 
-void Light_service_set_can_id(uint16_t can_id){
+void light_service_set_can_id(uint16_t can_id){
     current_can_id = can_id;
 }
 
 
-static void Set_leds(const bool led_on[]){
+static void set_leds(const bool led_on[]){
     for (uint16_t i = 0; i< NUM_LED; i++){
         HAL_GPIO_WritePin(  led_ports[i], 
                          led_pins[i], 
@@ -45,17 +45,17 @@ static void Set_leds(const bool led_on[]){
 }
 
 
-static void Led_Display_Can_ID(uint16_t id){
+static void led_display_can_id(uint16_t id){
     bool led_on[NUM_LED] = {false};
     for (uint16_t i = 0u; i<NUM_LED; i++){
         led_on[i] = ((id>>i) & 0x1u) != 0u;
     }
 
-    Set_leds(led_on);
+    set_leds(led_on);
 }
 
 
-static void Led_Display_Cycle(uint16_t cycle_speed){
+static void led_display_cycle(uint16_t cycle_speed){
     bool led_on[NUM_LED] = {false};
 
     if (cycle_count >= (uint16_t)(UPDATE_RATE / cycle_speed) ){
@@ -67,11 +67,11 @@ static void Led_Display_Cycle(uint16_t cycle_speed){
     }
     
     led_on[cycle_state] = true;
-    Set_leds(led_on);
+    set_leds(led_on);
     cycle_count++;
 }
 
-static void Led_Display_Bounce_Cycle(uint16_t cycle_speed)
+static void led_display_bounce_cycle(uint16_t cycle_speed)
 {
     bool led_on[NUM_LED] = {false};
 
@@ -92,13 +92,13 @@ static void Led_Display_Bounce_Cycle(uint16_t cycle_speed)
     }
 
     led_on[cycle_state] = true;
-    Set_leds(led_on);
+    set_leds(led_on);
 
     cycle_count++;
 }
 
 
-static void Led_Display_Error(uint16_t cycle_speed){
+static void led_display_error(uint16_t cycle_speed){
     bool led_on[NUM_LED] = {false};
     
     if (cycle_speed == 0u) {
@@ -119,33 +119,33 @@ static void Led_Display_Error(uint16_t cycle_speed){
         }
     }
     
-    Set_leds(led_on);
+    set_leds(led_on);
     cycle_count++;
 }
 
-void Light_Service_Update(void){
+void light_service_update(void){
 
     //LED ARRAY
-    switch (Led_display_state) {
+    switch (led_display_state) {
         case LED_DISPLAY_CANID:
-            Led_Display_Can_ID(current_can_id);
+            led_display_can_id(current_can_id);
             break;
-            
+
         case LED_DISPLAY_CYCLE:
-            Led_Display_Cycle(CYCLE_RATE);
+            led_display_cycle(CYCLE_RATE);
             break;
 
         case LED_DISPLAY_BOUNCE_CYCLE:
-            Led_Display_Bounce_Cycle(CYCLE_RATE);
+            led_display_bounce_cycle(CYCLE_RATE);
             break;
 
         case LED_DISPLAY_ERROR:
-            Led_Display_Error(CYCLE_RATE);
+            led_display_error(CYCLE_RATE);
             break;
 
         case LED_DISPLAY_OFF:
             bool led_on[NUM_LED] = {false};
-            Set_leds(led_on);
+            set_leds(led_on);
             break;
 
         default:
