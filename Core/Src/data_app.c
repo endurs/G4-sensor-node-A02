@@ -1,8 +1,8 @@
 #include "data_app.h"
 #include "acan.h"
 #include "tc_k.h"
-#include <stdint.h>
 #include "rgb_light_service.h"
+#include <stdint.h>
 
 static float cjc_temps[4] = {0};
 static float tc_temps[4]  = {0};

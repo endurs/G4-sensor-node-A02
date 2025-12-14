@@ -3,8 +3,8 @@
 #include "tim.h"
 #include <math.h>
 #include <stdint.h>
-#include "main.h" //for hal time now thing?
 #include "data_app.h"
+#include "main.h" //for hal time now thing?
 
 
 // DMA backing buffers, interleaved [R1,R2,R1,R2,...]
@@ -14,6 +14,7 @@ static uint16_t adc3_buf[ADC_DMA_BUF_LEN];
 static uint16_t adc4_buf[ADC_DMA_BUF_LEN];
 
 static float adc_sample[4][2] = {0}; //in voltage
+static uint32_t s_sample_index = 0;
 
 static volatile uint8_t s_adc_frame_ready_mask = 0u;
 static const float adc_q =  3.3f / 65535.0f; //assuming 3.3V and 16bit adc
@@ -68,8 +69,8 @@ static void process_half_block(ADC_HandleTypeDef *hadc,
     // When all 4 ADCs have updated for this sample, build and send frame
     if (s_adc_frame_ready_mask == 0x0Fu) {
         s_adc_frame_ready_mask = 0u;
-        uint32_t timestamp = HAL_GetTick();
-        data_process_adc_data(timestamp, adc_sample);
+        uint32_t sample_index = s_sample_index++;
+        data_process_adc_data(sample_index, adc_sample);
     }
 }
 

@@ -25,6 +25,7 @@
 #include "rtc.h"
 #include "tim.h"
 #include "gpio.h"
+#include "data_app.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */

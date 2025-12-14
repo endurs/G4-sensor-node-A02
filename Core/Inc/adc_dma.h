@@ -1,7 +1,7 @@
 #pragma once
 #include "main.h"
 
-#define ADC_DECIM_FACTOR        10u
+#define ADC_DECIM_FACTOR        1u
 #define ADC_RANKS_PER_ADC       2u
 #define ADC_WORDS_PER_HALF      (ADC_DECIM_FACTOR * ADC_RANKS_PER_ADC)
 #define ADC_DMA_BUF_LEN         (2u * ADC_WORDS_PER_HALF)
