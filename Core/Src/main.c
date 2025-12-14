@@ -19,7 +19,6 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "adc.h"
-#include "data_app.h"
 #include "dma.h"
 #include "fdcan.h"
 #include "i2c.h"
@@ -39,6 +38,7 @@
 #include "light_service.h"
 #include "rgb_light_service.h"
 #include <stdint.h>
+//#include "data_app.c"
 
 /* USER CODE END Includes */
 
@@ -102,7 +102,7 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-   HAL_Init();
+  HAL_Init();
 
   /* USER CODE BEGIN Init */
 
