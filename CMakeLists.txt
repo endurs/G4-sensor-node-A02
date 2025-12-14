@@ -52,6 +52,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/acan.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/light_service.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/rgb_light_service.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/data_app.c
 
 
 )

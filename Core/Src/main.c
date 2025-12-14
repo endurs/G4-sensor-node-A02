@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "adc.h"
+#include "data_app.h"
 #include "dma.h"
 #include "fdcan.h"
 #include "i2c.h"
@@ -74,14 +75,6 @@ static tmp117_t *g_tmp_list[] = {
 
 static const uint8_t g_tmp_count = sizeof(g_tmp_list) / sizeof(g_tmp_list[0]);
 
-//TC stuff
-static tc_k_ctx_t g_tc_k;
-volatile float g_tc_degC[4] = {0};
-
-const uint32_t adc_buffer_read_delay_ms = 100; // Delay between ADC DMA reads
-
-const uint32_t acan_msg_freq = 2; //hz
-
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -109,7 +102,7 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+   HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -137,13 +130,8 @@ int main(void)
   MX_TIM7_Init();
   /* USER CODE BEGIN 2 */
   
-
-  //ADC and thermocouple
-  tc_k_init(&g_tc_k, (tc_k_cfg_t) {
-    .gain = 110.89f, 
-    .v_offset = 1.235f
-    });
-        
+  //ADC and thermocouple handling stuff
+  init_data_app();        
   ADC_DMA_StartAll();
   
 
@@ -163,22 +151,10 @@ int main(void)
   light_service_set_state(LED_DISPLAY_BOUNCE_CYCLE);
   
   rgb_light_service_init();
-  rgb_light_service_set_state(RGB_DISPLAY_RAINBOW);
+  rgb_light_service_set_state(RGB_DISPLAY_TEMPERATURE);
   
   HAL_TIM_Base_Start_IT(&htim7); //interrupt running rgb and light service updates
 
-
-  uint32_t last_adc_poll = HAL_GetTick();
-
-  volatile float PT1_v = 0;
-  volatile float PT2_v = 0;
-  volatile float PT3_v = 0;
-  volatile float PT4_v = 0;
-
-  volatile float TC1_v = 0;
-  volatile float TC2_v = 0;
-  volatile float TC3_v = 0;
-  volatile float TC4_v = 0;
 
   /* USER CODE END 2 */
 
@@ -188,31 +164,6 @@ int main(void)
 
   while (1)
   {
-    uint32_t now = HAL_GetTick();
-
-    if (now - last_adc_poll >= adc_buffer_read_delay_ms) {
-      last_adc_poll = now;
-
-      const float q = 3.3f / 65535.0f; //65535.0f;
-
-      PT1_v = g_adc_avg_500Hz[0][1] * q;
-      PT2_v = g_adc_avg_500Hz[1][1] * q;
-      PT3_v = g_adc_avg_500Hz[2][1] * q;
-      PT4_v = g_adc_avg_500Hz[3][1] * q;
-
-      TC1_v = g_adc_avg_500Hz[0][0] * q;
-      TC2_v = g_adc_avg_500Hz[1][0] * q;
-      TC3_v = g_adc_avg_500Hz[2][0] * q;
-      TC4_v = g_adc_avg_500Hz[3][0] * q;
-
-
-      TelemetryFrame_t can_msg = {  .timestamp = now,
-                                    .value = {PT1_v, PT2_v, PT3_v, PT4_v, g_tc_degC[0], g_tc_degC[1], g_tc_degC[2], g_tc_degC[3]},
-                                    .reserved = {0}
-      };
-
-      ACAN_Send(&can_msg);
-    }
 
     /* USER CODE END WHILE */
 
@@ -280,7 +231,7 @@ void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c)
 {
   TMP117_I2C_MemRxCpltIRQ(hi2c);
 
-  //todo put cjc pusher function in here
+  data_update_cjc_temp(g_tmp117_48.last_degC, g_tmp117_49.last_degC);
 
   TMP117_Scheduler_Service(g_tmp_list, g_tmp_count);
 }
